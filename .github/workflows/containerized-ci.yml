@@ -72,7 +72,7 @@ jobs:
       with:
         repository: earth-system-radiation/rrtmgp-data
         path: rrtmgp-data
-        ref: feature-new-lw-quadrature
+        ref: v1.8.1
     #
     # Build libraries, examples and tests (expect success)
     #
