@@ -1251,7 +1251,7 @@ contains
     !$omp target enter data map(alloc:flux_up, albedo, src, denom)
 
     if(top_at_1) then
-      !$acc loop gang vector collapse(2)
+      !$acc parallel loop gang vector collapse(2)
       !$omp target teams distribute parallel do simd collapse(2)
       do igpt = 1, ngpt
         do icol = 1, ncol
