@@ -607,23 +607,26 @@ contains
     !$acc data copy(tau1)
     !$acc data copyin(tau2, ssa2, gpt_lims)
 
-    !$acc parallel loop collapse(3)
+!    !$acc parallel loop collapse(3)
     !$omp target teams distribute parallel do simd collapse(3) &
     !$omp& map(to:tau2, ssa2) &
     !$omp& map(tofrom:tau1) &
     !$omp& map(to:gpt_lims)
-    do igpt = 1 , ngpt
+do ibnd=1, nbnd
+!$acc parallel loop collapse(3)
+do igpt = gpt_lims(1, ibnd), gpt_lims(2, ibnd)
+!    do igpt = 1, ngpt
       do ilay = 1 , nlay
         do icol = 1 , ncol
-          do ibnd = 1, nbnd
-            if (igpt >= gpt_lims(1, ibnd) .and. igpt <= gpt_lims(2, ibnd) ) then
+!          do ibnd = 1, nbnd
+!            if (igpt >= gpt_lims(1, ibnd) .and. igpt <= gpt_lims(2, ibnd) ) then
               tau1(icol,ilay,igpt) = tau1(icol,ilay,igpt) + tau2(icol,ilay,ibnd) * (1._wp - ssa2(icol,ilay,ibnd))
-            endif
-          end do
+!            endif
+!          end do
         end do
       end do
     end do
-
+end do
   !$acc end data
   !$acc end data
   end subroutine inc_1scalar_by_2stream_bybnd
@@ -735,7 +738,7 @@ contains
     !$acc data copy(tau1, ssa1, g1)
     !$acc data copyin(tau2, ssa2, g2, gpt_lims)
 
-    !$acc parallel loop collapse(3)
+!    !$acc parallel loop collapse(3)
     !$omp target teams distribute parallel do simd collapse(3) &
     !$omp& map(tofrom:tau1) &
     !$omp& map(to:tau2, ssa2) &
@@ -743,11 +746,11 @@ contains
     !$omp& map(to:gpt_lims) &
     !$omp& map(tofrom:g1) &
     !$omp& map(to:g2)
-    do igpt = 1 , ngpt
+do ibnd = 1, nbnd
+!$acc parallel loop collapse(3) 
+do igpt = gpt_lims(1, ibnd), gpt_lims(2,ibnd)
       do ilay = 1, nlay
         do icol = 1, ncol
-          do ibnd = 1, nbnd
-            if (igpt >= gpt_lims(1, ibnd) .and. igpt <= gpt_lims(2, ibnd) ) then
               ! t=tau1 + tau2
               tau12 = tau1(icol,ilay,igpt) + tau2(icol,ilay,ibnd)
               ! w=(tau1*ssa1 + tau2*ssa2) / t
@@ -759,12 +762,10 @@ contains
                  tau2(icol,ilay,ibnd) * ssa2(icol,ilay,ibnd) * g2(icol,ilay,ibnd)) / max(eps,tauscat12)
               ssa1(icol,ilay,igpt) = tauscat12 / max(eps,tau12)
               tau1(icol,ilay,igpt) = tau12
-            endif
           end do
         end do
       end do
     end do
-
   !$acc end data
   !$acc end data
   end subroutine inc_2stream_by_2stream_bybnd
