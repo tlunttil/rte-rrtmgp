@@ -1265,7 +1265,6 @@ contains
           ! From bottom to top of atmosphere --
           !   compute albedo and source of upward radiation
           !
-          !$acc loop seq 
           do ilev = nlay, 1, -1
             denom(icol,ilev,igpt) = 1._wp/(1._wp - rdif(icol,ilev,igpt)*albedo(icol,ilev+1,igpt))    ! Eq 10
             albedo(icol,ilev,igpt) = rdif(icol,ilev,igpt) + &
@@ -1284,10 +1283,10 @@ contains
           ilev = 1
           flux_up(icol,ilev,igpt) = flux_dn(icol,ilev,igpt) * albedo(icol,ilev,igpt) + & ! ... reflection of incident diffuse and
                                     src(icol,ilev,igpt)                                  ! emission from below
+
           !
           ! From the top of the atmosphere downward -- compute fluxes
           !
-          !$acc loop seq
           do ilev = 2, nlay+1
             flux_dn(icol,ilev,igpt) = (tdif(icol,ilev-1,igpt)*flux_dn(icol,ilev-1,igpt) + &  ! Equation 13
                                rdif(icol,ilev-1,igpt)*src(icol,ilev,igpt) +       &
@@ -1297,6 +1296,7 @@ contains
           end do
         end do
       end do
+
     else
 
       !$acc parallel loop collapse(2)
