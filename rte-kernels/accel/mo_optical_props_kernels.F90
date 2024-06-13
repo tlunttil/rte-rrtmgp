@@ -567,23 +567,26 @@ contains
     !$acc data copy(tau1)
     !$acc data copyin(tau2, gpt_lims)
 
-    !$acc parallel loop collapse(3)
+!    !$acc parallel loop collapse(3)
     !$omp target teams distribute parallel do simd collapse(3) &
     !$omp& map(to:tau2) &
     !$omp& map(tofrom:tau1) &
     !$omp& map(to:gpt_lims)
-    do igpt = 1 , ngpt
+do ibnd=1, nbnd 
+!   do igpt = 1 , ngpt
+!$acc parallel loop collapse(3)
+do igpt = gpt_lims(1, ibnd), gpt_lims(2, ibnd) 
       do ilay = 1 , nlay
         do icol = 1 , ncol
-          do ibnd = 1, nbnd
-            if (igpt >= gpt_lims(1, ibnd) .and. igpt <= gpt_lims(2, ibnd) ) then
+!          do ibnd = 1, nbnd
+!            if (igpt >= gpt_lims(1, ibnd) .and. igpt <= gpt_lims(2, ibnd) ) then
               tau1(icol,ilay,igpt) = tau1(icol,ilay,igpt) + tau2(icol,ilay,ibnd)
-            endif
-          end do
+!            endif
+!          end do
         end do
       end do
     end do
-
+enddo
   !$acc end data
   !$acc end data
   end subroutine inc_1scalar_by_1scalar_bybnd

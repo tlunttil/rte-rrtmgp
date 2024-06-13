@@ -480,28 +480,29 @@ end do
           ! What is the starting point in the stored array of minor absorption coefficients?
           minor_start = kminor_start(imnr)
 
+if (.NOT. minor_scales_with_density(imnr)) then
           !$acc loop seq
           do igpt = minor_limits_gpt(1,imnr), minor_limits_gpt(2,imnr)
 
             scaling = col_gas(icol,ilay,idx_minor(imnr))
-            if (minor_scales_with_density(imnr)) then
-              !
-              ! NOTE: P needed in hPa to properly handle density scaling.
-              !
-              scaling = scaling * (PaTohPa * myplay/mytlay)
-
-              if(idx_minor_scaling(imnr) > 0) then  ! there is a second gas that affects this gas's absorption
-                mycol_gas_imnr = col_gas(icol,ilay,idx_minor_scaling(imnr))
-                vmr_fact = 1._wp / mycol_gas_0
-                dry_fact = 1._wp / (1._wp + mycol_gas_h2o * vmr_fact)
-                ! scale by density of special gas
-                if (scale_by_complement(imnr)) then ! scale by densities of all gases but the special one
-                  scaling = scaling * (1._wp - mycol_gas_imnr * vmr_fact * dry_fact)
-                else
-                  scaling = scaling *         (mycol_gas_imnr * vmr_fact * dry_fact)
-                endif
-              endif
-            endif
+!            if (minor_scales_with_density(imnr)) then
+!              !
+!              ! NOTE: P needed in hPa to properly handle density scaling.
+!              !
+!              scaling = scaling * (PaTohPa * myplay/mytlay)
+!
+!              if(idx_minor_scaling(imnr) > 0) then  ! there is a second gas that affects this gas's absorption
+!                mycol_gas_imnr = col_gas(icol,ilay,idx_minor_scaling(imnr))
+!                vmr_fact = 1._wp / mycol_gas_0
+!                dry_fact = 1._wp / (1._wp + mycol_gas_h2o * vmr_fact)
+!                ! scale by density of special gas
+!                if (scale_by_complement(imnr)) then ! scale by densities of all gases but the special one
+!                  scaling = scaling * (1._wp - mycol_gas_imnr * vmr_fact * dry_fact)
+!                else
+!                  scaling = scaling *         (mycol_gas_imnr * vmr_fact * dry_fact)
+!                endif
+!              endif
+!            endif
 
             !
             ! Interpolation of absorption coefficient and calculation of optical depth
@@ -514,6 +515,66 @@ end do
             tau_minor = kminor_loc * scaling
             tau(icol,ilay,igpt) = tau(icol,ilay,igpt) + tau_minor
           enddo
+
+elseif (idx_minor_scaling(imnr)>0) then
+
+          do igpt = minor_limits_gpt(1,imnr), minor_limits_gpt(2,imnr)
+
+            scaling = col_gas(icol,ilay,idx_minor(imnr))
+              !
+              ! NOTE: P needed in hPa to properly handle density scaling.
+              !
+              scaling = scaling * (PaTohPa * myplay/mytlay)
+
+                mycol_gas_imnr = col_gas(icol,ilay,idx_minor_scaling(imnr))
+                vmr_fact = 1._wp / mycol_gas_0
+                dry_fact = 1._wp / (1._wp + mycol_gas_h2o * vmr_fact)
+                ! scale by density of special gas
+                if (scale_by_complement(imnr)) then ! scale by densities of all gases but the special one
+                  scaling = scaling * (1._wp - mycol_gas_imnr * vmr_fact * dry_fact)
+                else
+                  scaling = scaling *         (mycol_gas_imnr * vmr_fact * dry_fact)
+                endif
+
+            !
+            ! Interpolation of absorption coefficient and calculation of optical depth
+            !
+            tau_minor = 0._wp
+            iflav = gpt_flv(idx_tropo,igpt) ! eta interpolation depends on flavor
+            minor_loc = minor_start + (igpt - minor_limits_gpt(1,imnr)) ! add offset to starting point
+            kminor_loc = interpolate2D(fminor(:,:,icol,ilay,iflav), kminor, minor_loc, &
+                                        jeta(:,icol,ilay,iflav), myjtemp)
+            tau_minor = kminor_loc * scaling
+            tau(icol,ilay,igpt) = tau(icol,ilay,igpt) + tau_minor
+          enddo
+else
+
+
+          do igpt = minor_limits_gpt(1,imnr), minor_limits_gpt(2,imnr)
+
+            scaling = col_gas(icol,ilay,idx_minor(imnr))
+!              !
+!              ! NOTE: P needed in hPa to properly handle density scaling.
+!              !
+              scaling = scaling * (PaTohPa * myplay/mytlay)
+
+
+            !
+            ! Interpolation of absorption coefficient and calculation of optical depth
+            !
+            tau_minor = 0._wp
+            iflav = gpt_flv(idx_tropo,igpt) ! eta interpolation depends on flavor
+            minor_loc = minor_start + (igpt - minor_limits_gpt(1,imnr)) ! add offset to starting point
+            kminor_loc = interpolate2D(fminor(:,:,icol,ilay,iflav), kminor, minor_loc, &
+                                        jeta(:,icol,ilay,iflav), myjtemp)
+            tau_minor = kminor_loc * scaling
+            tau(icol,ilay,igpt) = tau(icol,ilay,igpt) + tau_minor
+          enddo
+endif
+
+
+
+
         enddo
 
       enddo
@@ -618,13 +679,16 @@ end do
     !$omp             map(from: sfc_src,lay_src,lev_src_inc,lev_src_dec,sfc_source_Jac)
 
     ! Calculation of fraction of band's Planck irradiance associated with each g-point
-    !$acc parallel loop tile(128,2)
+!    !$acc parallel loop tile(128,2)
+
     !$omp target teams distribute parallel do simd collapse(2)
+!$acc parallel loop gang vector collapse(3)
+do igpt = 1, ngpt
     do ilay = 1, nlay
       do icol = 1, ncol
 
-        !$acc loop seq
-        do igpt = 1, ngpt
+!        !$acc loop seq
+!        do igpt = 1, ngpt
           ibnd = gpoint_bands(igpt)
           ! itropo = 1 lower atmosphere; itropo = 2 upper atmosphere
           itropo = merge(1,2,tropo(icol,ilay))  !WS moved itropo inside loop for GPU
@@ -648,10 +712,11 @@ end do
             sfc_src       (icol,igpt) = pfrac * planck_function_1
             sfc_source_Jac(icol,igpt) = pfrac * (planck_function_2 - planck_function_1)
           end if
-        end do ! igpt
+!        end do ! igpt
 
       end do ! icol
     end do ! ilay
+enddo
 
     !$acc end        data
     !$omp end target data
