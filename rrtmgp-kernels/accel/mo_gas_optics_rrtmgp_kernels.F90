@@ -477,6 +477,7 @@ end do
 
         !$acc loop seq
         do imnr = 1, extent
+!$scc cache(kminor_start, minor_scales_with_density, minor_limits_gpt, idx_minor, idx_minor_scaling)
           ! What is the starting point in the stored array of minor absorption coefficients?
           minor_start = kminor_start(imnr)
 
@@ -517,7 +518,7 @@ if (.NOT. minor_scales_with_density(imnr)) then
           enddo
 
 elseif (idx_minor_scaling(imnr)>0) then
-
+          !$acc loop seq
           do igpt = minor_limits_gpt(1,imnr), minor_limits_gpt(2,imnr)
 
             scaling = col_gas(icol,ilay,idx_minor(imnr))
@@ -548,8 +549,7 @@ elseif (idx_minor_scaling(imnr)>0) then
             tau(icol,ilay,igpt) = tau(icol,ilay,igpt) + tau_minor
           enddo
 else
-
-
+          !$acc loop seq
           do igpt = minor_limits_gpt(1,imnr), minor_limits_gpt(2,imnr)
 
             scaling = col_gas(icol,ilay,idx_minor(imnr))
