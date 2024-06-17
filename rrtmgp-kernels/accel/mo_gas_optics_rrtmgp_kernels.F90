@@ -450,6 +450,7 @@ end do
     real(wp), parameter :: PaTohPa = 0.01_wp
     real(wp) :: vmr_fact, dry_fact             ! conversion from column abundance to dry vol. mixing ratio;
     real(wp) :: scaling, kminor_loc, tau_minor ! minor species absorption coefficient, optical depth
+    real(wp) :: scc
     integer  :: icol, ilay, iflav, igpt, imnr
     integer  :: minor_start, minor_loc, extent
 
@@ -475,17 +476,18 @@ end do
         mycol_gas_h2o = col_gas(icol,ilay,idx_h2o)
         mycol_gas_0   = col_gas(icol,ilay,0)
 
-        !$acc loop seq
+!        !$acc loop seq
         do imnr = 1, extent
 !$scc cache(kminor_start, minor_scales_with_density, minor_limits_gpt, idx_minor, idx_minor_scaling)
           ! What is the starting point in the stored array of minor absorption coefficients?
           minor_start = kminor_start(imnr)
 
-if (.NOT. minor_scales_with_density(imnr)) then
-          !$acc loop seq
-          do igpt = minor_limits_gpt(1,imnr), minor_limits_gpt(2,imnr)
+          scaling = col_gas(icol,ilay,idx_minor(imnr))
 
-            scaling = col_gas(icol,ilay,idx_minor(imnr))
+! if (.NOT. minor_scales_with_density(imnr)) then
+
+!          do igpt = minor_limits_gpt(1,imnr), minor_limits_gpt(2,imnr)
+
 !            if (minor_scales_with_density(imnr)) then
 !              !
 !              ! NOTE: P needed in hPa to properly handle density scaling.
@@ -508,70 +510,72 @@ if (.NOT. minor_scales_with_density(imnr)) then
             !
             ! Interpolation of absorption coefficient and calculation of optical depth
             !
-            tau_minor = 0._wp
-            iflav = gpt_flv(idx_tropo,igpt) ! eta interpolation depends on flavor
-            minor_loc = minor_start + (igpt - minor_limits_gpt(1,imnr)) ! add offset to starting point
-            kminor_loc = interpolate2D(fminor(:,:,icol,ilay,iflav), kminor, minor_loc, &
-                                        jeta(:,icol,ilay,iflav), myjtemp)
-            tau_minor = kminor_loc * scaling
-            tau(icol,ilay,igpt) = tau(icol,ilay,igpt) + tau_minor
-          enddo
+!            iflav = gpt_flv(idx_tropo,igpt) ! eta interpolation depends on flavor
+!            minor_loc = minor_start + (igpt - minor_limits_gpt(1,imnr)) ! add offset to starting point
+!            kminor_loc = interpolate2D(fminor(:,:,icol,ilay,iflav), kminor, minor_loc, &
+!                                        jeta(:,icol,ilay,iflav), myjtemp)
+!            tau_minor = kminor_loc * scaling
+!            tau(icol,ilay,igpt) = tau(icol,ilay,igpt) + tau_minor
+!          enddo
 
-elseif (idx_minor_scaling(imnr)>0) then
-          !$acc loop seq
-          do igpt = minor_limits_gpt(1,imnr), minor_limits_gpt(2,imnr)
+if (minor_scales_with_density(imnr)) then
+          !
+          ! NOTE: P needed in hPa to properly handle density scaling.
+          !
+          scaling = scaling * (PaTohPa * myplay/mytlay)
 
-            scaling = col_gas(icol,ilay,idx_minor(imnr))
-              !
-              ! NOTE: P needed in hPa to properly handle density scaling.
-              !
-              scaling = scaling * (PaTohPa * myplay/mytlay)
+          if (idx_minor_scaling(imnr)>0) then 
+            mycol_gas_imnr = col_gas(icol,ilay,idx_minor_scaling(imnr))
+            vmr_fact = 1._wp / mycol_gas_0
+            dry_fact = 1._wp / (1._wp + mycol_gas_h2o * vmr_fact)
+            ! scale by density of special gas
+            if (scale_by_complement(imnr)) then ! scale by densities of all gases but the special one
+              scaling = scaling * (1._wp - mycol_gas_imnr * vmr_fact * dry_fact)
+            else
+              scaling = scaling *         (mycol_gas_imnr * vmr_fact * dry_fact)
+            endif
+          endif
 
-                mycol_gas_imnr = col_gas(icol,ilay,idx_minor_scaling(imnr))
-                vmr_fact = 1._wp / mycol_gas_0
-                dry_fact = 1._wp / (1._wp + mycol_gas_h2o * vmr_fact)
-                ! scale by density of special gas
-                if (scale_by_complement(imnr)) then ! scale by densities of all gases but the special one
-                  scaling = scaling * (1._wp - mycol_gas_imnr * vmr_fact * dry_fact)
-                else
-                  scaling = scaling *         (mycol_gas_imnr * vmr_fact * dry_fact)
-                endif
-
+!          do igpt = minor_limits_gpt(1,imnr), minor_limits_gpt(2,imnr)
             !
             ! Interpolation of absorption coefficient and calculation of optical depth
             !
-            tau_minor = 0._wp
-            iflav = gpt_flv(idx_tropo,igpt) ! eta interpolation depends on flavor
-            minor_loc = minor_start + (igpt - minor_limits_gpt(1,imnr)) ! add offset to starting point
-            kminor_loc = interpolate2D(fminor(:,:,icol,ilay,iflav), kminor, minor_loc, &
-                                        jeta(:,icol,ilay,iflav), myjtemp)
-            tau_minor = kminor_loc * scaling
-            tau(icol,ilay,igpt) = tau(icol,ilay,igpt) + tau_minor
-          enddo
-else
-          !$acc loop seq
-          do igpt = minor_limits_gpt(1,imnr), minor_limits_gpt(2,imnr)
-
-            scaling = col_gas(icol,ilay,idx_minor(imnr))
-!              !
-!              ! NOTE: P needed in hPa to properly handle density scaling.
-!              !
-              scaling = scaling * (PaTohPa * myplay/mytlay)
-
-
+!            iflav = gpt_flv(idx_tropo,igpt) ! eta interpolation depends on flavor
+!            minor_loc = minor_start + (igpt - minor_limits_gpt(1,imnr)) ! add offset to starting point
+!            kminor_loc = interpolate2D(fminor(:,:,icol,ilay,iflav), kminor, minor_loc, &
+!                                        jeta(:,icol,ilay,iflav), myjtemp)
+!            tau_minor = kminor_loc * scaling
+!            tau(icol,ilay,igpt) = tau(icol,ilay,igpt) + tau_minor
+!          enddo
+! else if (minor_scales_with_density(imnr)) then
+          ! NOTE: P needed in hPa to properly handle density scaling.
+          !
+!          scaling = scaling * (PaTohPa * myplay/mytlay)
+ 
+ !         do igpt = minor_limits_gpt(1,imnr), minor_limits_gpt(2,imnr)
             !
             ! Interpolation of absorption coefficient and calculation of optical depth
             !
-            tau_minor = 0._wp
-            iflav = gpt_flv(idx_tropo,igpt) ! eta interpolation depends on flavor
-            minor_loc = minor_start + (igpt - minor_limits_gpt(1,imnr)) ! add offset to starting point
-            kminor_loc = interpolate2D(fminor(:,:,icol,ilay,iflav), kminor, minor_loc, &
-                                        jeta(:,icol,ilay,iflav), myjtemp)
-            tau_minor = kminor_loc * scaling
-            tau(icol,ilay,igpt) = tau(icol,ilay,igpt) + tau_minor
-          enddo
+!            iflav = gpt_flv(idx_tropo,igpt) ! eta interpolation depends on flavor
+!            minor_loc = minor_start + (igpt - minor_limits_gpt(1,imnr)) ! add offset to starting point
+!            kminor_loc = interpolate2D(fminor(:,:,icol,ilay,iflav), kminor, minor_loc, &
+!                                        jeta(:,icol,ilay,iflav), myjtemp)
+!            tau_minor = kminor_loc * scc * (PaTohPa * myplay/mytlay) 
+!            tau(icol,ilay,igpt) = tau(icol,ilay,igpt) + tau_minor
+!          enddo
 endif
 
+          do igpt = minor_limits_gpt(1,imnr), minor_limits_gpt(2,imnr)
+            !
+            ! Interpolation of absorption coefficient and calculation of optical depth
+            !
+            iflav = gpt_flv(idx_tropo,igpt) ! eta interpolation depends on flavor
+            minor_loc = minor_start + (igpt - minor_limits_gpt(1,imnr)) ! add offset to starting point
+            kminor_loc = interpolate2D(fminor(:,:,icol,ilay,iflav), kminor, minor_loc, &
+                                        jeta(:,icol,ilay,iflav), myjtemp)
+            tau_minor = kminor_loc * scaling
+            tau(icol,ilay,igpt) = tau(icol,ilay,igpt) + tau_minor
+          enddo
 
 
 
@@ -613,21 +617,23 @@ endif
     integer  :: itropo
     ! -----------------
 
-    !$acc parallel loop collapse(2)
+!   !$acc parallel loop collapse(2)
+!$acc parallel loop collapse(3)
+do igpt = 1, ngpt
     !$omp target teams distribute parallel do simd collapse(2)
     do ilay = 1, nlay
       do icol = 1, ncol
-        !$acc loop seq
-        do igpt = 1, ngpt
+!        do igpt = 1, ngpt
           itropo = merge(1,2,tropo(icol,ilay)) ! itropo = 1 lower atmosphere; itropo = 2 upper atmosphere
           iflav = gpoint_flavor(itropo, igpt)
           k = interpolate2D(fminor(:,:,icol,ilay,iflav), &
                             krayl(:,:,:,itropo),      &
                             igpt, jeta(:,icol,ilay,iflav), jtemp(icol,ilay))
           tau_rayleigh(icol,ilay,igpt) =  k * (col_gas(icol,ilay,idx_h2o)+col_dry(icol,ilay))
-        end do
+!        end do
       end do
     end do
+end do
   end subroutine compute_tau_rayleigh
 
   ! ----------------------------------------------------------
