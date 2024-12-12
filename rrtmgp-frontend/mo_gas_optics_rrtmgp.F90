@@ -2010,6 +2010,11 @@ contains
 
     integer :: icol, ilay, igpt, ncol, nlay, ngpt, nmom
     real(wp) :: t
+#if defined(_CRAYFTN) && _RELEASE_MAJOR <= 19
+!ACCWA (Cray Fortran <= 19) some arrays need to be accessed via dummy pointers
+    real(wp), pointer :: tau_dummy(:,:,:)
+    real(wp), pointer :: ssa_dummy(:,:,:)
+#endif
 
     ncol = size(tau, 1)
     nlay = size(tau, 2)
@@ -2019,13 +2024,23 @@ contains
       !
       ! Extinction optical depth
       !
+#if defined(_CRAYFTN) && _RELEASE_MAJOR <= 19
+!ACCWA (Cray Fortran <= 19) some arrays need to be accessed via dummy pointers
+      tau_dummy => optical_props%tau
+#endif
       !$acc parallel loop gang vector collapse(3) default(present)
       !$omp target teams distribute parallel do simd collapse(3)
       do igpt = 1, ngpt
         do ilay = 1, nlay
           do icol = 1, ncol
+#if defined(_CRAYFTN) && _RELEASE_MAJOR <= 19
+!ACCWA (Cray Fortran <= 19) some arrays need to be accessed via dummy pointers
+            tau_dummy(icol,ilay,igpt) = tau(icol,ilay,igpt) + &
+                                       tau_rayleigh(icol,ilay,igpt)
+#else
             optical_props%tau(icol,ilay,igpt) = tau(icol,ilay,igpt) + &
                                        tau_rayleigh(icol,ilay,igpt)
+#endif
           end do
         end do
       end do
@@ -2036,19 +2051,34 @@ contains
       !
       ! Extinction optical depth and single scattering albedo
       !
+#if defined(_CRAYFTN) && _RELEASE_MAJOR <= 19
+!ACCWA (Cray Fortran <= 19) some arrays need to be accessed via dummy pointers
+      tau_dummy => optical_props%tau
+      ssa_dummy => optical_props%ssa
+#endif
       !$acc parallel loop gang vector collapse(3) default(present)
       !$omp target teams distribute parallel do simd collapse(3)
       do igpt = 1, ngpt
         do ilay = 1, nlay
           do icol = 1, ncol
             t = tau(icol,ilay,igpt) + tau_rayleigh(icol,ilay,igpt)
+#if defined(_CRAYFTN) && _RELEASE_MAJOR <= 19
+!ACCWA (Cray Fortran <= 19) some arrays need to be accessed via dummy pointers
             if(t > 2._wp * tiny(t)) then
-               optical_props%ssa(icol,ilay,igpt) = tau_rayleigh(icol,ilay,igpt) / t
-             else
-               optical_props%ssa(icol,ilay,igpt) = 0._wp
-             end if
-             optical_props%tau(icol,ilay,igpt) = t
-           end do
+              ssa_dummy(icol,ilay,igpt) = tau_rayleigh(icol,ilay,igpt) / t
+            else
+              ssa_dummy(icol,ilay,igpt) = 0._wp
+            end if
+            tau_dummy(icol,ilay,igpt) = t
+#else
+            if(t > 2._wp * tiny(t)) then
+              optical_props%ssa(icol,ilay,igpt) = tau_rayleigh(icol,ilay,igpt) / t
+            else
+              optical_props%ssa(icol,ilay,igpt) = 0._wp
+            end if
+            optical_props%tau(icol,ilay,igpt) = t
+#endif
+          end do
         end do
       end do
       call zero_array(ncol, nlay, ngpt, optical_props%g)
@@ -2062,13 +2092,23 @@ contains
         do ilay = 1, nlay
           do icol = 1, ncol
             t = tau(icol,ilay,igpt) + tau_rayleigh(icol,ilay,igpt)
+#if defined(_CRAYFTN) && _RELEASE_MAJOR <= 19
+!ACCWA (Cray Fortran <= 19) some arrays need to be accessed via dummy pointers
             if(t > 2._wp * tiny(t)) then
-               optical_props%ssa(icol,ilay,igpt) = tau_rayleigh(icol,ilay,igpt) / t
-             else
-               optical_props%ssa(icol,ilay,igpt) = 0._wp
-             end if
-             optical_props%tau(icol,ilay,igpt) = t
-           end do
+              ssa_dummy(icol,ilay,igpt) = tau_rayleigh(icol,ilay,igpt) / t
+            else
+              ssa_dummy(icol,ilay,igpt) = 0._wp
+            end if
+            tau_dummy(icol,ilay,igpt) = t
+#else
+            if(t > 2._wp * tiny(t)) then
+              optical_props%ssa(icol,ilay,igpt) = tau_rayleigh(icol,ilay,igpt) / t
+            else
+              optical_props%ssa(icol,ilay,igpt) = 0._wp
+            end if
+            optical_props%tau(icol,ilay,igpt) = t
+#endif
+          end do
         end do
       end do
       nmom = size(optical_props%p, 1)
